@@ -30,19 +30,17 @@ jobs:
         run: |
           # Устанавливаем yc
           curl -s https://storage.yandexcloud.net/yandexcloud-yc/install.sh | bash
-          # Добавляем yc в PATH
+          # Явно добавляем yc в PATH для текущего шага
           echo "$HOME/yandex-cloud/bin" >> $GITHUB_PATH
           # Проверяем установку
-          yc --version
+          $HOME/yandex-cloud/bin/yc --version
 
       - name: Configure Docker
         run: |
-          # Авторизуемся в Yandex Cloud
-          echo "${{ secrets.YC_SA_KEY }}" > key.json
-          yc config set service-account-key key.json
-          # Настраиваем Docker
-          yc container registry configure-docker
-          echo "::add-mask::$(yc config get token)"
+          # Явно указываем полный путь к yc
+          $HOME/yandex-cloud/bin/yc config set service-account-key <(echo '${{ secrets.YC_SA_KEY }}')
+          $HOME/yandex-cloud/bin/yc container registry configure-docker
+          echo "::add-mask::$($HOME/yandex-cloud/bin/yc config get token)"
           
       - name: Build and Push Docker Image
         run: |
