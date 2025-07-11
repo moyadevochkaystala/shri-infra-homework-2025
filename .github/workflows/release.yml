@@ -53,7 +53,7 @@ jobs:
       - name: Create Release Branch
         run: |
           git checkout -b releases/${{ github.run_number }}
-          git push origin releases/${{ github.run_number }}
+          git push --set-upstream origin releases/${{ github.run_number }}
       - name: Create Git Tag
         run: |
           git config --global user.name "${{ github.actor }}"
@@ -75,16 +75,16 @@ jobs:
           git commit -m "Update CHANGELOG for v${{ github.run_number }}"
           git push
 
-      - name: Create GitHub Issue
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      - name: Update CHANGELOG.md
         run: |
-          COMMITS=$(git log --pretty=format:"- %s (%an)" $(git describe --tags --abbrev=0 || echo "")..HEAD)
-          gh issue create \
-            --title "Release v${{ github.run_number }}" \
-            --body "**Дата:** $(date +'%Y-%m-%d %H:%M')
-                    **Автор:** ${{ github.actor }}
-                    **Версия:** ${{ github.run_number }}
-                    **Docker Image:** cr.yandex/${{ env.REGISTRY_ID }}/${{ env.APP_NAME }}:${{ github.run_number }}
-                    **Изменения:**
-                    $COMMITS"
+          git config --global user.name "${{ github.actor }}"
+          git config --global user.email "${{ github.actor }}@users.noreply.github.com"
+          echo "# v${{ github.run_number }} ($(date +'%Y-%m-%d'))" > CHANGELOG.md
+          echo "**Автор:** ${{ github.actor }}" >> CHANGELOG.md
+          git log --pretty=format:"- %s (%an)" $(git describe --tags --abbrev=0 || echo "")..HEAD >> CHANGELOG.md
+          echo "" >> CHANGELOG.md
+          cat CHANGELOG.md >> CHANGELOG.tmp
+          mv CHANGELOG.tmp CHANGELOG.md
+          git add CHANGELOG.md
+          git commit -m "Update CHANGELOG for v${{ github.run_number }}"
+          git push origin HEAD:releases/${{ github.run_number }}
