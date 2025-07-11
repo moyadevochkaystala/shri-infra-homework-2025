@@ -26,9 +26,16 @@ jobs:
         run: |
           npm run lint
           npm run test
+      - name: Install Yandex Cloud CLI
+        run: |
+          curl -s https://storage.yandexcloud.net/yandexcloud-yc/install.sh | bash
+          echo "$HOME/yandex-cloud/bin" >> $GITHUB_PATH
 
-      - name: Login to Yandex Container Registry
-        run: yc container registry configure-docker
+      - name: Configure Docker
+        run: |
+          yc container registry configure-docker
+          echo "::add-mask::$(yc config get token)" 
+    
 
       - name: Build and Push Docker Image
         run: |
