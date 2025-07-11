@@ -26,10 +26,13 @@ jobs:
         run: |
           npm run lint
           npm run test
-      - name: Install Yandex Cloud CLI
+      - name: Login to Container Registry
+        env:
+          YC_SA_KEY: ${{ secrets.YC_SA_KEY }}
         run: |
-          curl -s https://storage.yandexcloud.net/yandexcloud-yc/install.sh | bash
-          echo "$HOME/yandex-cloud/bin" >> $GITHUB_PATH
+          echo "$YC_SA_KEY" > key.json
+          yc config set service-account-key key.json
+          yc container registry configure-docker
 
       - name: Configure Docker
         run: |
