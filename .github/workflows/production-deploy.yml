@@ -18,27 +18,21 @@ jobs:
     steps:
       - name: Authenticate and check image
         env:
-          YC_SA_KEY: ${{ secrets.YC_SA_KEY }}  # Должен содержать ВЕСЬ JSON ключа
+          YC_SA_KEY: ${{ secrets.YC_SA_KEY }}
         run: |
-          # Сохраняем ключ из секретов
+          # 1. Получаем IAM-токен из ключа сервисного аккаунта
           echo "$YC_SA_KEY" > key.json
-          
-          # Проверяем, что файл содержит валидный JSON
-          if ! jq -e .private_key key.json >/dev/null; then
-            echo "::error::Invalid service account key format!"
-            exit 1
-          fi
-          
-          # Извлекаем приватный ключ
-          jq -r .private_key key.json > key.pem
-          
-          # Логинимся в Container Registry
-          if ! docker login --username iam --password-stdin cr.yandex < key.pem; then
+          IAM_TOKEN=$(yc iam create-token --profile=github-actions 2>/dev/null || \
+                      jq -r .access_token <(curl -s -H "Metadata-Flavor: Google" \
+                      "http://169.254.169.254/computeMetadata/v1/instance/service-accounts/default/token"))
+      
+          # 2. Логинимся в Container Registry
+          if ! echo "$IAM_TOKEN" | docker login --username iam --password-stdin cr.yandex; then
             echo "::error::Docker login failed!"
             exit 1
           fi
-          
-          # Проверяем наличие образа
+      
+          # 3. Проверяем наличие образа
           if ! docker manifest inspect cr.yandex/${{ env.REGISTRY_ID }}/${{ env.APP_NAME }}:13_latest; then
             echo "::error::Image not found in registry!"
             exit 1
