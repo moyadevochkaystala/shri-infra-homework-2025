@@ -76,11 +76,11 @@ jobs:
           # Execute the script on the remote machine
           ssh -i ssh_key -o StrictHostKeyChecking=no ${{ env.SSH_USER }}@${{ env.VM_IP }} "$DEPLOY_SCRIPT"
 
-      - name: Update deployment status
+      - name: Add Deployment Comment to Release Issue
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
-          # Find issue by release version in title
+          # Find issue by release version
           ISSUE_NUMBER=$(gh issue list --search "Release v${{ github.event.inputs.release_version }}" --json number -q '.[0].number')
           
           if [ -z "$ISSUE_NUMBER" ]; then
@@ -88,9 +88,10 @@ jobs:
             exit 0
           fi
           
+          # Create deployment comment
           gh issue comment $ISSUE_NUMBER \
-            --body "**Deployment Successful**  
-                    **Version:** ${{ github.event.inputs.release_version }}  
-                    **Deployed by:** ${{ github.actor }}  
-                    **Image:** cr.yandex/${{ env.REGISTRY_ID }}/${{ env.APP_NAME }}:${{ github.event.inputs.release_version }}_latest  
-                    **Timestamp:** $(date +'%Y-%m-%d %H:%M %Z')"
+            --body "**Релиз выкачен в прод**  
+                    **Версия:** ${{ github.event.inputs.release_version }}  
+                    **Запустил деплой:** ${{ github.actor }}  
+                    **Docker Image:** cr.yandex/${{ env.REGISTRY_ID }}/${{ env.APP_NAME }}:${{ github.event.inputs.release_version }}_latest  
+                    **Дата выкатки:** $(date +'%Y-%m-%d %H:%M %Z')"
