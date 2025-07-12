@@ -76,22 +76,23 @@ jobs:
           # Execute the script on the remote machine
           ssh -i ssh_key -o StrictHostKeyChecking=no ${{ env.SSH_USER }}@${{ env.VM_IP }} "$DEPLOY_SCRIPT"
 
-      - name: Add Deployment Comment to Release Issue
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Add Deployment Comment
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
-          # Автоматически находим issue по названию релиза
-          ISSUE_NUMBER=$(gh issue list --search "Release v${{ github.event.inputs.release_version }}" --json number -q '.[0].number')
+          ISSUE_NUMBER=$(gh issue list --search "Release v13" --json number -q '.[0].number')
           
           if [ -z "$ISSUE_NUMBER" ]; then
-            echo "Issue for release v${{ github.event.inputs.release_version }} not found!"
+            echo "Issue for release v13 not found!"
             exit 0
           fi
           
-          # Формируем комментарий о деплое
           gh issue comment $ISSUE_NUMBER \
             --body "✅ **Релиз выкачен в прод**  
-                    **Версия:** ${{ github.event.inputs.release_version }}  
-                    **Запустил деплой:** ${{ github.actor }}  
-                    **Docker Image:** cr.yandex/${{ env.REGISTRY_ID }}/${{ env.APP_NAME }}:${{ github.event.inputs.release_version }}_latest  
+                    **Версия:** 13  
+                    **Запустил деплой:** olechkakulic  
+                    **Docker Image:** cr.yandex/crperh81ttnqgnsobd6c/app:13_latest  
                     **Дата выкатки:** $(date +'%Y-%m-%d %H:%M %Z')"
