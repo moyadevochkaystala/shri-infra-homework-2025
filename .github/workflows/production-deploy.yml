@@ -16,25 +16,42 @@ jobs:
   deploy:
     runs-on: ubuntu-latest
     steps:
-      - name: Authenticate and check image
+      - name: Setup environment
+        run: |
+          echo "Preparing to deploy version ${{ github.event.inputs.release_version }}"
+          
+      - name: Install YC CLI
+        run: |
+          curl -s https://storage.yandexcloud.net/yandexcloud-yc/install.sh | bash
+          echo "$HOME/yandex-cloud/bin" >> $GITHUB_PATH
+
+      - name: Authenticate in Container Registry
         env:
           YC_SA_KEY: ${{ secrets.YC_SA_KEY }}
         run: |
-          # 1. Получаем IAM-токен из ключа сервисного аккаунта
+          # Save service account key
           echo "$YC_SA_KEY" > key.json
-          IAM_TOKEN=$(yc iam create-token --profile=github-actions 2>/dev/null || \
-                      jq -r .access_token <(curl -s -H "Metadata-Flavor: Google" \
-                      "http://169.254.169.254/computeMetadata/v1/instance/service-accounts/default/token"))
-      
-          # 2. Логинимся в Container Registry
-          if ! echo "$IAM_TOKEN" | docker login --username iam --password-stdin cr.yandex; then
-            echo "::error::Docker login failed!"
+          
+          # Verify key format
+          if ! jq -e .private_key key.json >/dev/null; then
+            echo "::error::Invalid service account key format"
             exit 1
           fi
-      
-          # 3. Проверяем наличие образа
-          if ! docker manifest inspect cr.yandex/${{ env.REGISTRY_ID }}/${{ env.APP_NAME }}:13_latest; then
-            echo "::error::Image not found in registry!"
+          
+          # Configure Docker with YC
+          yc container registry configure-docker --profile sa-profile
+          echo "::add-mask::$(yc config get token)"
+          
+          # Login to registry
+          if ! docker login --username iam --password-stdin cr.yandex < <(jq -r .private_key key.json); then
+            echo "::error::Failed to login to container registry"
+            exit 1
+          fi
+
+      - name: Verify image exists
+        run: |
+          if ! docker manifest inspect cr.yandex/${{ env.REGISTRY_ID }}/${{ env.APP_NAME }}:${{ github.event.inputs.release_version }}_latest; then
+            echo "::error::Image not found in registry"
             exit 1
           fi
 
@@ -42,23 +59,33 @@ jobs:
         env:
           SSH_KEY: ${{ secrets.VM_SSH_KEY }}
         run: |
+          # Prepare SSH key
           echo "$SSH_KEY" > ssh_key
           chmod 600 ssh_key
           
-          ssh -i ssh_key -o StrictHostKeyChecking=no ${{ env.SSH_USER }}@${{ env.VM_IP }} "
-            # Pull and run new container
+          # Deployment commands
+          ssh -i ssh_key -o StrictHostKeyChecking=no ${{ env.SSH_USER }}@${{ env.VM_IP }} << 'EOF'
+            # Stop and remove old container
             docker stop app || true
             docker rm app || true
-            docker pull cr.yandex/${{ env.REGISTRY_ID }}/${{ env.APP_NAME }}:${{ github.event.inputs.release_version }}_latest
-            docker run -d -p 80:3000 --name app cr.yandex/${{ env.REGISTRY_ID }}/${{ env.APP_NAME }}:${{ github.event.inputs.release_version }}_latest
-          "
+            
+            # Authenticate on VM
+            echo "$YC_SA_KEY" > /tmp/key.json
+            jq -r .private_key /tmp/key.json | docker login --username iam --password-stdin cr.yandex
+            
+            # Pull and run new version
+            docker pull cr.yandex/$REGISTRY_ID/$APP_NAME:$1_latest
+            docker run -d -p 80:3000 --name app cr.yandex/$REGISTRY_ID/$APP_NAME:$1_latest
+          EOF
+          " "${{ github.event.inputs.release_version }}"
 
-      - name: Add Deployment Comment to Issue
+      - name: Update deployment status
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           gh issue comment ${{ github.event.inputs.release_version }} \
-            --body "**Выкачено в прод:** $(date +'%Y-%m-%d %H:%M')
-                    **Версия:** ${{ github.event.inputs.release_version }}
-                    **Запустил:** ${{ github.actor }}
-                    **Образ:** cr.yandex/${{ env.REGISTRY_ID }}/${{ env.APP_NAME }}:${{ github.event.inputs.release_version }}_latest"
+            --body "**Deployment Successful**  
+                    **Version:** ${{ github.event.inputs.release_version }}  
+                    **Deployed by:** ${{ github.actor }}  
+                    **Image:** cr.yandex/${{ env.REGISTRY_ID }}/${{ env.APP_NAME }}:${{ github.event.inputs.release_version }}_latest  
+                    **Timestamp:** $(date +'%Y-%m-%d %H:%M %Z')"
