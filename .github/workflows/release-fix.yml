@@ -60,13 +60,20 @@ jobs:
           git tag -a v${{ github.event.inputs.release_version }}_fix${{ github.run_number }} \
                     -m "Fix ${{ github.run_number }} for release v${{ github.event.inputs.release_version }}"
           git push origin v${{ github.event.inputs.release_version }}_fix${{ github.run_number }}
-
       - name: Add Comment to Release Issue
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
+          # Автоматически находим issue по названию релиза
+          ISSUE_NUMBER=$(gh issue list --search "Release v${{ github.event.inputs.release_version }}" --json number -q '.[0].number')
+          
+          if [ -z "$ISSUE_NUMBER" ]; then
+            echo "Issue for release v${{ github.event.inputs.release_version }} not found!"
+            exit 0
+          fi
+      
           COMMITS=$(git log --pretty=format:"- %s (%an)" $(git describe --tags --abbrev=0 | grep -v fix || echo "")..HEAD)
-          gh issue comment ${{ github.event.inputs.release_version }} \
+          gh issue comment $ISSUE_NUMBER \
             --body "**Фикс выпущен:** $(date +'%Y-%m-%d %H:%M')
                     **Автор фикса:** ${{ github.actor }}
                     **Версия фикса:** ${{ github.run_number }}
