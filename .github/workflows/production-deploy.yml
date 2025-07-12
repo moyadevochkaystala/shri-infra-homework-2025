@@ -27,26 +27,25 @@ jobs:
 
       - name: Authenticate in Container Registry
         env:
-          YC_SA_KEY: ${{ secrets.YC_SA_KEY }}
+          YC_SA_KEY: ${{ secrets.YC_SA_KEY }}  # JSON ключа вашего существующего сервисного аккаунта
         run: |
-          # Save service account key
+          # 1. Сохраняем ключ сервисного аккаунта
           echo "$YC_SA_KEY" > key.json
           
-          # Verify key format
+          # 2. Проверяем валидность ключа
           if ! jq -e .private_key key.json >/dev/null; then
             echo "::error::Invalid service account key format"
             exit 1
           fi
           
-          # Configure Docker with YC
-          yc container registry configure-docker --profile sa-profile
-          echo "::add-mask::$(yc config get token)"
-          
-          # Login to registry
-          if ! docker login --username iam --password-stdin cr.yandex < <(jq -r .private_key key.json); then
+          # 3. Аутентификация в Docker Registry (прямой способ)
+          if ! jq -r .private_key key.json | docker login --username iam --password-stdin cr.yandex; then
             echo "::error::Failed to login to container registry"
             exit 1
           fi
+          
+          # 4. Проверка доступа
+          echo "Successfully logged in to cr.yandex"
 
       - name: Verify image exists
         run: |
