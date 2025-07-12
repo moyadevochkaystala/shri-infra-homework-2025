@@ -80,7 +80,15 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
-          gh issue comment ${{ github.event.inputs.release_version }} \
+          # Find issue by release version in title
+          ISSUE_NUMBER=$(gh issue list --search "Release v${{ github.event.inputs.release_version }}" --json number -q '.[0].number')
+          
+          if [ -z "$ISSUE_NUMBER" ]; then
+            echo "Issue for release v${{ github.event.inputs.release_version }} not found!"
+            exit 0
+          fi
+          
+          gh issue comment $ISSUE_NUMBER \
             --body "**Deployment Successful**  
                     **Version:** ${{ github.event.inputs.release_version }}  
                     **Deployed by:** ${{ github.actor }}  
