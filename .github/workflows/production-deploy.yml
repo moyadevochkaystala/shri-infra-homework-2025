@@ -3,7 +3,7 @@ on:
   workflow_dispatch:
     inputs:
       release_version:
-        description: 'Version to deploy (number)'
+        description: 'Release version to deploy (number)'
         required: true
 
 env:
@@ -29,22 +29,14 @@ jobs:
         env:
           YC_SA_KEY: ${{ secrets.YC_SA_KEY }}
         run: |
-          # 1. Сохраняем ключ сервисного аккаунта
           echo "$YC_SA_KEY" > key.json
-          
-          # 2. Configure YC CLI with the service account key
           yc config set service-account-key key.json
-          
-          # 3. Получаем IAM-токен
           IAM_TOKEN=$(yc iam create-token)
           
-          # 4. Аутентификация в Docker Registry
           if ! echo "$IAM_TOKEN" | docker login --username iam --password-stdin cr.yandex; then
             echo "::error::Failed to login to container registry"
             exit 1
           fi
-          
-          echo "Successfully logged in to cr.yandex"
 
       - name: Verify image exists
         run: |
@@ -57,28 +49,29 @@ jobs:
         env:
           SSH_KEY: ${{ secrets.VM_SSH_KEY }}
         run: |
-          # Prepare SSH key
           echo "$SSH_KEY" > ssh_key
           chmod 600 ssh_key
           
-          # Deployment commands
-          ssh -i ssh_key -o StrictHostKeyChecking=no ${{ env.SSH_USER }}@${{ env.VM_IP }} << 'EOF'
-            # Stop and remove old container
+          # Using ssh with -t flag to force pseudo-terminal allocation
+          ssh -tt -i ssh_key -o StrictHostKeyChecking=no ${{ env.SSH_USER }}@${{ env.VM_IP }} << 'ENDSSH'
+            # Clean up existing container if it exists
             docker stop app || true
             docker rm app || true
             
-            # Get IAM token on VM
-            IAM_TOKEN=$(curl -s -H "Metadata-Flavor: Google" \
+            # Authenticate using the VM's service account (simplified as per documentation)
+            curl -s --header "Metadata-Flavor: Google" \
               "http://169.254.169.254/computeMetadata/v1/instance/service-accounts/default/token" | \
-              jq -r .access_token)
+              cut -f1 -d',' | \
+              cut -f2 -d':' | \
+              tr -d '"' | \
+              docker login --username iam --password-stdin cr.yandex
             
-            # Authenticate
-            echo "$IAM_TOKEN" | docker login --username iam --password-stdin cr.yandex
-            
-            # Pull and run new version
+            # Pull and run the new version
+            export REGISTRY_ID=$REGISTRY_ID
             docker pull cr.yandex/$REGISTRY_ID/$APP_NAME:$1_latest
             docker run -d -p 80:3000 --name app cr.yandex/$REGISTRY_ID/$APP_NAME:$1_latest
-          EOF
+            exit 0
+          ENDSSH
           " "${{ github.event.inputs.release_version }}"
 
       - name: Update deployment status
