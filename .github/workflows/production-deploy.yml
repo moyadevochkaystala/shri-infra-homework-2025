@@ -80,10 +80,7 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
-          # Устанавливаем корректный репозиторий
-          gh repo set-default https://github.com/${{ github.repository }}.git
-          
-          # Ищем issue по версии релиза
+          # Автоматически находим issue по названию релиза
           ISSUE_NUMBER=$(gh issue list --search "Release v${{ github.event.inputs.release_version }}" --json number -q '.[0].number')
           
           if [ -z "$ISSUE_NUMBER" ]; then
@@ -91,7 +88,7 @@ jobs:
             exit 0
           fi
           
-          # Добавляем комментарий
+          # Формируем комментарий о деплое
           gh issue comment $ISSUE_NUMBER \
             --body "✅ **Релиз выкачен в прод**  
                     **Версия:** ${{ github.event.inputs.release_version }}  
